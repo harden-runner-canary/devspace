@@ -43,6 +43,7 @@ jobs:
           raw.githubusercontent.com:443
           registry-1.docker.io:443
           storage.googleapis.com:443
+          test.ssh-simple.devspace:22
 
     - name: Checkout repo
       uses: actions/checkout@v2
