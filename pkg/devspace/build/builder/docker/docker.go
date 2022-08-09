@@ -151,7 +151,7 @@ func (b *Builder) BuildImage(ctx devspacecontext.Context, contextPath, dockerfil
 		}
 	}
 	if useDockerCli || useBuildKit || len(cliArgs) > 0 {
-		err = b.client.ImageBuildCLI(ctx.Context(), ctx.WorkingDir(), useBuildKit, body, writer, cliArgs, *buildOptions, ctx.Log())
+		err = b.client.ImageBuildCLI(ctx.Context(), ctx.WorkingDir(), ctx.Environ(), useBuildKit, body, writer, cliArgs, *buildOptions, ctx.Log())
 		if err != nil {
 			return err
 		}
@@ -184,9 +184,9 @@ func (b *Builder) BuildImage(ctx devspacecontext.Context, contextPath, dockerfil
 	} else {
 		ctx.Log().Infof("Skip image push for %s", b.helper.ImageName)
 		//load image if it is a kind-context
-		if ctx.KubeClient() != nil && kubectl.IsKindContext(ctx.KubeClient().CurrentContext()) {
+		if ctx.KubeClient() != nil && kubectl.GetKindContext(ctx.KubeClient().CurrentContext()) != "" {
 			for _, tag := range buildOptions.Tags {
-				command := []string{"kind", "load", "docker-image", tag}
+				command := []string{"kind", "load", "docker-image", "--name", kubectl.GetKindContext(ctx.KubeClient().CurrentContext()), tag}
 				completeArgs := []string{}
 				completeArgs = append(completeArgs, command[1:]...)
 				// Determine output writer
@@ -197,7 +197,7 @@ func (b *Builder) BuildImage(ctx devspacecontext.Context, contextPath, dockerfil
 					writeCloser = ctx.Log().Writer(logrus.InfoLevel, false)
 				}
 				defer writeCloser.Close()
-				err = command2.CommandWithEnv(ctx.Context(), ctx.WorkingDir(), writeCloser, writeCloser, nil, nil, command[0], completeArgs...)
+				err = command2.Command(ctx.Context(), ctx.WorkingDir(), ctx.Environ(), writeCloser, writeCloser, nil, command[0], completeArgs...)
 				if err != nil {
 					ctx.Log().Info(errors.Errorf("error during image load to kind cluster: %v", err))
 				}

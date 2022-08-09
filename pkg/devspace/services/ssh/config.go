@@ -21,7 +21,43 @@ var (
 	MarkerEndPrefix   = "# DevSpace End "
 )
 
-func configureSSHConfig(host, port string, log log.Logger) error {
+func configureSSHConfig(host, port string, useInclude bool, log log.Logger) error {
+	if useInclude {
+		return configureSSHConfigSeparateFile(host, port, log)
+	}
+
+	return configureSSHConfigSameFile(host, port, log)
+}
+
+func configureSSHConfigSameFile(host, port string, log log.Logger) error {
+	configLock.Lock()
+	defer configLock.Unlock()
+
+	homeDir, err := homedir.Dir()
+	if err != nil {
+		return errors.Wrap(err, "get home dir")
+	}
+
+	sshConfigPath := filepath.Join(homeDir, ".ssh", "config")
+	newFile, err := addHost(sshConfigPath, host, port)
+	if err != nil {
+		return errors.Wrap(err, "parse ssh config")
+	}
+
+	err = os.MkdirAll(filepath.Dir(sshConfigPath), 0755)
+	if err != nil {
+		log.Debugf("error creating ssh directory: %v", err)
+	}
+
+	err = ioutil.WriteFile(sshConfigPath, []byte(newFile), 0600)
+	if err != nil {
+		return errors.Wrap(err, "write ssh config")
+	}
+
+	return nil
+}
+
+func configureSSHConfigSeparateFile(host, port string, log log.Logger) error {
 	configLock.Lock()
 	defer configLock.Unlock()
 
@@ -151,6 +187,7 @@ func includeDevSpaceConfig(path string) (string, error) {
 
 	// add new section
 	newLines = append(newLines, startMarker)
+	newLines = append(newLines, "Match all")
 	newLines = append(newLines, "Include devspace_config")
 	newLines = append(newLines, "# DevSpace End")
 	return strings.Join(newLines, "\n"), nil
@@ -193,6 +230,7 @@ func addHost(path, host, port string) (string, error) {
 	newLines = append(newLines, startMarker)
 	newLines = append(newLines, "Host "+host)
 	newLines = append(newLines, "  HostName localhost")
+	newLines = append(newLines, "  LogLevel error")
 	newLines = append(newLines, "  Port "+port)
 	newLines = append(newLines, "  IdentityFile "+DevSpaceSSHPrivateKeyFile)
 	newLines = append(newLines, "  StrictHostKeyChecking no")

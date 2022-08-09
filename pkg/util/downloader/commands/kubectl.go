@@ -3,7 +3,9 @@ package commands
 import (
 	"context"
 	"io/ioutil"
+	"mvdan.cc/sh/v3/expand"
 	"net/http"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -39,8 +41,8 @@ func (k *kubectlCommand) InstallPath() (string, error) {
 }
 
 func (k *kubectlCommand) DownloadURL() string {
-	// let the default kubectl version be 1.22.0
-	kubectlVersion := "v1.22.0"
+	// let the default kubectl version be 1.24.1
+	kubectlVersion := "v1.24.1"
 
 	// try to fetch latest kubectl version if it fails use default version
 	res, err := http.Get("https://storage.googleapis.com/kubernetes-release/release/stable.txt")
@@ -53,7 +55,6 @@ func (k *kubectlCommand) DownloadURL() string {
 	}
 
 	url := "https://storage.googleapis.com/kubernetes-release/release/" + kubectlVersion + "/bin/" + runtime.GOOS + "/" + runtime.GOARCH + "/kubectl"
-
 	if runtime.GOOS == "windows" {
 		url += ".exe"
 	}
@@ -62,7 +63,7 @@ func (k *kubectlCommand) DownloadURL() string {
 }
 
 func (k *kubectlCommand) IsValid(ctx context.Context, path string) (bool, error) {
-	out, err := command.Output(ctx, "", path, "version", "--client")
+	out, err := command.Output(ctx, "", expand.ListEnviron(os.Environ()...), path, "version", "--client")
 	if err != nil {
 		return false, nil
 	}
