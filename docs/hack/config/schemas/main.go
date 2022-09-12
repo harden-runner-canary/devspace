@@ -12,7 +12,7 @@ import (
 	"github.com/loft-sh/devspace/pkg/devspace/config/versions/latest"
 )
 
-const jsonschemaFile = "docs/schemas/config-jsonschema.json"
+const jsonschemaFile = "devspace-schema.json"
 const openapiSchemaFile = "docs/schemas/config-openapi.json"
 
 // Run executes the command logic
@@ -41,6 +41,26 @@ func genSchema(schema *jsonschema.Schema, schemaFile string) {
 	if isOpenAPISpec {
 		prefix = "      "
 	}
+
+	// vars
+	vars, ok := schema.Properties.Get("vars")
+	if ok {
+		vars.(*jsonschema.Schema).AnyOf = modifyAnyOf(vars)
+		vars.(*jsonschema.Schema).PatternProperties = nil
+	}
+	// pipelines
+	pipelines, ok := schema.Properties.Get("pipelines")
+	if ok {
+		pipelines.(*jsonschema.Schema).AnyOf = modifyAnyOf(pipelines)
+		pipelines.(*jsonschema.Schema).PatternProperties = nil
+	}
+	// commands
+	commands, ok := schema.Properties.Get("commands")
+	if ok {
+		commands.(*jsonschema.Schema).AnyOf = modifyAnyOf(commands)
+		commands.(*jsonschema.Schema).PatternProperties = nil
+	}
+
 	schemaJSON, err := json.MarshalIndent(schema, prefix, "  ")
 	if err != nil {
 		panic(err)
@@ -73,5 +93,22 @@ func genSchema(schema *jsonschema.Schema, schemaFile string) {
 	err = ioutil.WriteFile(schemaFile, []byte(schemaString), os.ModePerm)
 	if err != nil {
 		panic(err)
+	}
+}
+
+func modifyAnyOf(field interface{}) []*jsonschema.Schema {
+	return []*jsonschema.Schema{
+		{
+			Type: "object",
+			PatternProperties: map[string]*jsonschema.Schema{
+				".*": {
+					Type: "string",
+				},
+			},
+		},
+		{
+			Type:              "object",
+			PatternProperties: field.(*jsonschema.Schema).PatternProperties,
+		},
 	}
 }

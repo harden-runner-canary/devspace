@@ -408,6 +408,7 @@ func (u *upstream) execCommand(exec latest.SyncExec, changedFiles []string) erro
 	_, err := u.client.Execute(ctx, &remote.Command{
 		Cmd:  cmd,
 		Args: args,
+		Once: exec.Once,
 	})
 	if err != nil {
 		if exec.FailOnError {
@@ -822,6 +823,9 @@ func (u *upstream) filterChanges(files []*FileInformation) ([]*FileInformation, 
 			continue
 		} else if f.IsDirectory || u.sync.fileIndex.fileMap[f.Name] == nil || u.sync.fileIndex.fileMap[f.Name].Size != f.Size {
 			newChanges = append(newChanges, f)
+			alreadyUsed[f.Name] = true
+			continue
+		} else if f.Size == 0 {
 			alreadyUsed[f.Name] = true
 			continue
 		}

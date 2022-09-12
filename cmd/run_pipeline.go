@@ -15,6 +15,7 @@ import (
 	"github.com/loft-sh/devspace/pkg/devspace/dev"
 	"github.com/loft-sh/devspace/pkg/devspace/devpod"
 	"github.com/loft-sh/devspace/pkg/devspace/hook"
+	"github.com/loft-sh/devspace/pkg/devspace/kill"
 	"github.com/loft-sh/devspace/pkg/devspace/kubectl"
 	"github.com/loft-sh/devspace/pkg/devspace/pipeline"
 	"github.com/loft-sh/devspace/pkg/devspace/pipeline/types"
@@ -24,6 +25,7 @@ import (
 	"github.com/loft-sh/devspace/pkg/util/interrupt"
 	"github.com/loft-sh/devspace/pkg/util/log"
 	"github.com/loft-sh/devspace/pkg/util/message"
+	"github.com/mgutz/ansi"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -210,18 +212,11 @@ func (cmd *RunPipelineCmd) RunDefault(f factory.Factory) error {
 
 // Run executes the command logic
 func (cmd *RunPipelineCmd) Run(cobraCmd *cobra.Command, args []string, f factory.Factory, hookName string) error {
-	dashArgs := []string{}
-	if cobraCmd != nil && cobraCmd.ArgsLenAtDash() > -1 {
-		dashArgs = args[cobraCmd.ArgsLenAtDash():]
-		args = args[:cobraCmd.ArgsLenAtDash()]
-	}
-
-	if len(args) > 1 {
-		return fmt.Errorf("please specify only 1 pipeline to execute (got %v). E.g. devspace run-pipeline my-pipe -- other args", args)
-	} else if len(args) == 0 && cmd.Pipeline == "" {
+	if len(args) == 0 && cmd.Pipeline == "" {
 		return fmt.Errorf("please specify a pipeline through --pipeline or argument")
-	} else if len(args) == 1 && cmd.Pipeline == "" {
+	} else if len(args) > 0 && cmd.Pipeline == "" {
 		cmd.Pipeline = args[0]
+		args = args[1:]
 	}
 
 	if cmd.Log == nil {
@@ -259,7 +254,7 @@ func (cmd *RunPipelineCmd) Run(cobraCmd *cobra.Command, args []string, f factory
 	}
 
 	return runWithHooks(ctx, hookName, func() error {
-		return runPipeline(ctx, dashArgs, options)
+		return runPipeline(ctx, args, options)
 	})
 }
 
@@ -316,7 +311,7 @@ func initialize(ctx context.Context, f factory.Factory, options *CommandOptions,
 	if client != nil {
 		// If the current kube context or namespace is different than old,
 		// show warnings and reset kube client if necessary
-		client, err = kubectl.CheckKubeContext(client, localCache, options.NoWarn, options.SwitchContext, logger)
+		client, err = kubectl.CheckKubeContext(client, localCache, options.NoWarn, options.SwitchContext, false, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -433,6 +428,12 @@ func runPipeline(ctx devspacecontext.Context, args []string, options *CommandOpt
 	var configPipeline *latest.Pipeline
 	if ctx.Config().Config().Pipelines != nil && ctx.Config().Config().Pipelines[options.Pipeline] != nil {
 		configPipeline = ctx.Config().Config().Pipelines[options.Pipeline]
+		if configPipeline.Run == "" {
+			defaultPipeline, _ := types.GetDefaultPipeline(options.Pipeline)
+			if defaultPipeline != nil {
+				configPipeline.Run = defaultPipeline.Run
+			}
+		}
 	} else {
 		var err error
 		configPipeline, err = types.GetDefaultPipeline(options.Pipeline)
@@ -460,6 +461,16 @@ func runPipeline(ctx devspacecontext.Context, args []string, options *CommandOpt
 
 	// get deploy pipeline
 	pipe := pipeline.NewPipeline(ctx.Config().Config().Name, devPodManager, dependencyRegistry, configPipeline, options.Options)
+	kill.SetStopFunction(func(message string) {
+		if message != "" {
+			ctx.Log().WriteString(logrus.FatalLevel, "\n"+ansi.Color("fatal", "red+b")+" "+message+"\n")
+		}
+
+		err = pipe.Close()
+		if err != nil {
+			ctx.Log().Debugf("Error closing pipeline: %v", err)
+		}
+	})
 
 	// start ui & open
 	serv, err := dev.UI(ctx, options.UIPort, options.ShowUI, pipe)
@@ -479,6 +490,10 @@ func runPipeline(ctx devspacecontext.Context, args []string, options *CommandOpt
 	// start pipeline
 	err = pipe.Run(ctx.WithLogger(log.NewStreamLoggerWithFormat(stdoutWriter, stderrWriter, ctx.Log().GetLevel(), log.TimeFormat)), args)
 	if err != nil {
+		if err == context.Canceled {
+			return nil
+		}
+
 		return err
 	}
 	ctx.Log().Debugf("Wait for dev to finish")
@@ -486,6 +501,10 @@ func runPipeline(ctx devspacecontext.Context, args []string, options *CommandOpt
 	// wait for dev
 	err = pipe.WaitDev()
 	if err != nil {
+		if err == context.Canceled {
+			return nil
+		}
+
 		return err
 	}
 

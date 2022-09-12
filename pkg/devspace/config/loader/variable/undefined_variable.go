@@ -3,9 +3,11 @@ package variable
 import (
 	"context"
 	"fmt"
-	"github.com/loft-sh/devspace/pkg/devspace/config/localcache"
 	"os"
 	"strconv"
+
+	"github.com/loft-sh/devspace/pkg/devspace/config/localcache"
+	"github.com/sirupsen/logrus"
 
 	"github.com/loft-sh/devspace/pkg/devspace/config/versions/latest"
 	"github.com/loft-sh/devspace/pkg/util/log"
@@ -36,6 +38,11 @@ func (u *undefinedVariable) Load(ctx context.Context, _ *latest.Variable) (inter
 	// Is in generated config?
 	if v, ok := u.localCache.GetVar(u.name); ok {
 		return convertStringValue(v), nil
+	}
+
+	// is logger silent
+	if u.log == log.Discard || u.log.GetLevel() < logrus.InfoLevel {
+		return "", nil
 	}
 
 	// Ask for variable
@@ -87,9 +94,6 @@ func askQuestion(variable *latest.Variable, log log.Logger) (string, error) {
 
 		if len(variable.Options) > 0 {
 			params.Options = variable.Options
-			if variable.Default == nil {
-				params.DefaultValue = params.Options[0]
-			}
 		} else if variable.ValidationPattern != "" {
 			params.ValidationRegexPattern = variable.ValidationPattern
 

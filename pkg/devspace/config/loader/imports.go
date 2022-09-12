@@ -3,9 +3,6 @@ package loader
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"path/filepath"
-
 	"github.com/loft-sh/devspace/pkg/devspace/config/loader/variable"
 	"github.com/loft-sh/devspace/pkg/devspace/config/versions"
 	"github.com/loft-sh/devspace/pkg/devspace/config/versions/util"
@@ -13,6 +10,8 @@ import (
 	"github.com/loft-sh/devspace/pkg/util/log"
 	"github.com/loft-sh/devspace/pkg/util/yamlutil"
 	"github.com/pkg/errors"
+	"io/ioutil"
+	"path/filepath"
 )
 
 var ImportSections = []string{
@@ -46,7 +45,7 @@ func ResolveImports(ctx context.Context, resolver variable.Resolver, basePath st
 		return nil, errors.Errorf("Version is missing in devspace.yaml")
 	}
 
-	rawImportsInterface, err := resolver.FillVariablesInclude(ctx, rawImports, []string{"/imports/*/enabled"})
+	rawImportsInterface, err := resolver.FillVariablesInclude(ctx, rawImports, []string{"/imports/**"})
 	if err != nil {
 		return nil, err
 	}

@@ -76,6 +76,9 @@ var PipelineCommands = map[string]func(devCtx devspacecontext.Context, pipeline 
 	"select_pod": func(devCtx devspacecontext.Context, pipeline types.Pipeline, args []string) error {
 		return commands.SelectPod(devCtx, args)
 	},
+	"wait_pod": func(devCtx devspacecontext.Context, pipeline types.Pipeline, args []string) error {
+		return commands.WaitPod(devCtx, args)
+	},
 }
 
 func init() {
@@ -89,6 +92,9 @@ func init() {
 			_, _ = fmt.Fprintln(hc.Stderr, fmt.Errorf("cannot use command %s outside of a pipeline. Please make sure that you are calling %s within a pipeline execution. If you run a DevSpace command via `devspace run my-command` inside the pipeline, please use `run_command my-command` instead", name, name))
 			return interp.NewExitStatus(1)
 		}
+	}
+	for k := range PipelineCommands {
+		basichandlercommands.XArgsFocusCommands[k] = true
 	}
 }
 

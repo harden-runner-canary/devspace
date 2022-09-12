@@ -3,6 +3,7 @@ package variable
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -55,9 +56,10 @@ func MergeVarsWithFlags(vars map[string]interface{}, flags []string) error {
 type resolver struct {
 	vars        map[string]*latest.Variable
 	memoryCache map[string]interface{}
-	localCache  localcache.Cache
-	options     *PredefinedVariableOptions
-	log         log.Logger
+
+	localCache localcache.Cache
+	options    *PredefinedVariableOptions
+	log        log.Logger
 }
 
 func varMatchFn(key, value string) bool {
@@ -151,7 +153,7 @@ func (r *resolver) findVariablesInclude(haystack interface{}, include []*regexp.
 
 	// filter out runtime environment variables
 	for k := range varsUsed {
-		if !strings.HasPrefix(k, "runtime.") && !IsPredefinedVariable(k) && r.vars[k] == nil {
+		if !strings.HasPrefix(k, "runtime.") && !IsPredefinedVariable(k) && r.getVariableDefinition(k) == nil {
 			delete(varsUsed, k)
 		}
 	}
@@ -161,6 +163,23 @@ func (r *resolver) findVariablesInclude(haystack interface{}, include []*regexp.
 
 func (r *resolver) FindVariables(haystack interface{}) ([]*latest.Variable, error) {
 	return r.findVariablesInclude(haystack, nil)
+}
+
+func (r *resolver) getVariableDefinition(name string) *latest.Variable {
+	definition, ok := r.vars[name]
+	if !ok {
+		value := os.Getenv(name)
+		if value != "" {
+			return &latest.Variable{
+				Name:  name,
+				Value: value,
+			}
+		}
+
+		return nil
+	}
+
+	return definition
 }
 
 func (r *resolver) orderVariables(vars map[string]bool) ([]*latest.Variable, error) {
@@ -173,9 +192,8 @@ func (r *resolver) orderVariables(vars map[string]bool) ([]*latest.Variable, err
 			definition = &latest.Variable{Name: name}
 		} else {
 			// check if has definition
-			var ok bool
-			definition, ok = r.vars[name]
-			if !ok {
+			definition = r.getVariableDefinition(name)
+			if definition == nil {
 				continue
 			}
 		}
@@ -218,8 +236,8 @@ func (r *resolver) insertVariableGraph(g *graph.Graph, node *latest.Variable) er
 
 	parents := r.findVariablesInDefinition(node)
 	for parent := range parents {
-		parentDefinition, ok := r.vars[parent]
-		if !ok {
+		parentDefinition := r.getVariableDefinition(parent)
+		if parentDefinition == nil {
 			continue
 		}
 
@@ -242,9 +260,9 @@ func (r *resolver) insertVariableGraph(g *graph.Graph, node *latest.Variable) er
 func (r *resolver) FillVariablesInclude(ctx context.Context, haystack interface{}, includedPaths []string) (interface{}, error) {
 	paths := []*regexp.Regexp{}
 	for _, path := range includedPaths {
-		path = strings.ReplaceAll(path, "*", "[^/]+")
 		path = strings.ReplaceAll(path, "**", ".+")
-		path = "^" + path
+		path = strings.ReplaceAll(path, "*", "[^/]+")
+		path = "^" + path + "$"
 		expr, err := regexp.Compile(path)
 		if err != nil {
 			return nil, err
@@ -272,9 +290,9 @@ func (r *resolver) FillVariablesInclude(ctx context.Context, haystack interface{
 func (r *resolver) FillVariablesExclude(ctx context.Context, haystack interface{}, excludedPaths []string) (interface{}, error) {
 	paths := []*regexp.Regexp{}
 	for _, path := range excludedPaths {
-		path = strings.ReplaceAll(path, "*", "[^/]+")
 		path = strings.ReplaceAll(path, "**", ".+")
-		path = "^" + path
+		path = strings.ReplaceAll(path, "*", "[^/]+")
+		path = "^" + path + "$"
 		expr, err := regexp.Compile(path)
 		if err != nil {
 			return nil, err
@@ -427,7 +445,7 @@ func (r *resolver) findVariablesInDefinition(definition *latest.Variable) map[st
 
 	// filter out runtime environment variables and non existing ones
 	for k := range varsUsed {
-		if !strings.HasPrefix(k, "runtime.") && !IsPredefinedVariable(k) && r.vars[k] == nil {
+		if !strings.HasPrefix(k, "runtime.") && !IsPredefinedVariable(k) && r.getVariableDefinition(k) == nil {
 			delete(varsUsed, k)
 		}
 	}
@@ -509,7 +527,7 @@ func (r *resolver) resolveDefinitionString(ctx context.Context, str string, defi
 			// check if its a predefined variable
 			variable, err := NewPredefinedVariable(varName, r.options, r.log)
 			if err != nil {
-				if r.vars[varName] == nil {
+				if r.getVariableDefinition(varName) == nil {
 					return "${" + varName + "}", nil
 				}
 

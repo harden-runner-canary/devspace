@@ -1,12 +1,16 @@
 package v3
 
 import (
-	devspacecontext "github.com/loft-sh/devspace/pkg/devspace/context"
-	dependencyutil "github.com/loft-sh/devspace/pkg/devspace/dependency/util"
-	"github.com/sirupsen/logrus"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
+
+	devspacecontext "github.com/loft-sh/devspace/pkg/devspace/context"
+	dependencyutil "github.com/loft-sh/devspace/pkg/devspace/dependency/util"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 
 	"github.com/ghodss/yaml"
 	"github.com/loft-sh/devspace/pkg/devspace/config/versions/latest"
@@ -25,6 +29,14 @@ func NewClient(log log.Logger) (types.Client, error) {
 	c := &client{}
 	c.genericHelm = generic.NewGenericClient(commands.NewHelmV3Command(), log)
 	return c, nil
+}
+
+func (c *client) DownloadChart(ctx devspacecontext.Context, helmConfig *latest.HelmConfig) (string, error) {
+	chartName, err := dependencyutil.DownloadDependency(ctx.Context(), ctx.WorkingDir(), helmConfig.Chart.Source, ctx.Log())
+	if err != nil {
+		return "", err
+	}
+	return filepath.Dir(chartName), nil
 }
 
 // InstallChart installs the given chart via helm v3
@@ -53,7 +65,7 @@ func (c *client) InstallChart(ctx devspacecontext.Context, releaseName string, r
 	// Chart settings
 	chartName := ""
 	if helmConfig.Chart.Source != nil {
-		chartName, err = dependencyutil.DownloadDependency(ctx.Context(), ctx.WorkingDir(), helmConfig.Chart.Source, ctx.Log())
+		chartName, err = dependencyutil.GetDependencyPath(ctx.WorkingDir(), helmConfig.Chart.Source)
 		if err != nil {
 			return nil, err
 		}
@@ -71,11 +83,27 @@ func (c *client) InstallChart(ctx devspacecontext.Context, releaseName string, r
 		if helmConfig.Chart.Version != "" {
 			args = append(args, "--version", helmConfig.Chart.Version)
 		}
-		if helmConfig.Chart.Username != "" {
-			args = append(args, "--username", helmConfig.Chart.Username)
-		}
-		if helmConfig.Chart.Password != "" {
-			args = append(args, "--password", helmConfig.Chart.Password)
+
+		// log into OCI registry if specified
+		if strings.HasPrefix(chartName, "oci://") {
+			if helmConfig.Chart.Username != "" && helmConfig.Chart.Password != "" {
+				chartNameURL, err := url.Parse(chartName)
+				if err != nil {
+					return nil, errors.Wrap(err, "chartName malformed for oci registry")
+				}
+
+				_, err = c.genericHelm.Exec(ctx, []string{"registry", "login", chartNameURL.Hostname(), "--username", helmConfig.Chart.Username, "--password", helmConfig.Chart.Password})
+				if err != nil {
+					return nil, errors.Wrap(err, "login oci registry")
+				}
+			}
+		} else {
+			if helmConfig.Chart.Username != "" {
+				args = append(args, "--username", helmConfig.Chart.Username)
+			}
+			if helmConfig.Chart.Password != "" {
+				args = append(args, "--password", helmConfig.Chart.Password)
+			}
 		}
 	}
 
@@ -138,7 +166,7 @@ func (c *client) Template(ctx devspacecontext.Context, releaseName, releaseNames
 	// Chart settings
 	chartName := ""
 	if helmConfig.Chart.Source != nil {
-		chartName, err = dependencyutil.DownloadDependency(ctx.Context(), ctx.WorkingDir(), helmConfig.Chart.Source, ctx.Log())
+		chartName, err = dependencyutil.GetDependencyPath(ctx.WorkingDir(), helmConfig.Chart.Source)
 		if err != nil {
 			return "", err
 		}

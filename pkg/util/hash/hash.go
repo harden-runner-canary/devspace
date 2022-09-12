@@ -73,7 +73,6 @@ func Directory(path string) (string, error) {
 
 		return nil
 	})
-
 	if err != nil {
 		return "", err
 	}
@@ -89,6 +88,21 @@ func DirectoryExcludes(srcPath string, excludePatterns []string, fast bool) (str
 	}
 
 	hash := sha256.New()
+
+	// Stat dir / file
+	fileInfo, err := os.Stat(srcPath)
+	if err != nil {
+		return "", err
+	}
+
+	// Hash file
+	if !fileInfo.IsDir() {
+		size := strconv.FormatInt(fileInfo.Size(), 10)
+		mTime := strconv.FormatInt(fileInfo.ModTime().UnixNano(), 10)
+		_, _ = io.WriteString(hash, srcPath+";"+size+";"+mTime)
+
+		return fmt.Sprintf("%x", hash.Sum(nil)), nil
+	}
 
 	// Fix the source path to work with long path names. This is a no-op
 	// on platforms other than Windows.
