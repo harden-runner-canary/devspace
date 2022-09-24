@@ -17,7 +17,7 @@ import (
 	"github.com/loft-sh/devspace/pkg/devspace/config/localcache"
 	"github.com/loft-sh/devspace/pkg/devspace/config/remotecache"
 	"github.com/loft-sh/devspace/pkg/devspace/kubectl"
-	"github.com/loft-sh/devspace/pkg/util/command"
+	"github.com/loft-sh/loft-util/pkg/command"
 
 	"github.com/loft-sh/devspace/pkg/util/constraint"
 
@@ -302,7 +302,7 @@ func (l *configLoader) parseConfig(
 	resolver, err := variable.NewResolver(localCache, &variable.PredefinedVariableOptions{
 		ConfigPath: l.absConfigPath,
 		KubeClient: client,
-		Profile:    GetLastProfile(options.Profiles),
+		Profile:    options.Profiles,
 	}, options.Vars, log)
 	if err != nil {
 		return nil, nil, nil, err
@@ -566,13 +566,6 @@ func (l *configLoader) applyProfiles(ctx context.Context, data map[string]interf
 	}
 
 	return data, nil
-}
-
-func GetLastProfile(profiles []string) string {
-	if len(profiles) == 0 {
-		return ""
-	}
-	return profiles[len(profiles)-1]
 }
 
 // configExistsInPath checks whether a devspace configuration exists at a certain path

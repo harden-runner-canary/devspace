@@ -3,15 +3,17 @@ package basichandler
 import (
 	"context"
 	"fmt"
-	enginecommands "github.com/loft-sh/devspace/pkg/devspace/pipeline/engine/basichandler/commands"
-	"github.com/loft-sh/devspace/pkg/devspace/pipeline/engine/types"
-	"github.com/loft-sh/devspace/pkg/util/downloader"
-	"github.com/loft-sh/devspace/pkg/util/downloader/commands"
-	"github.com/loft-sh/devspace/pkg/util/log"
-	"github.com/pkg/errors"
-	"mvdan.cc/sh/v3/interp"
+	"github.com/loft-sh/devspace/pkg/devspace/config/constants"
 	"os"
 	"time"
+
+	enginecommands "github.com/loft-sh/devspace/pkg/devspace/pipeline/engine/basichandler/commands"
+	"github.com/loft-sh/devspace/pkg/devspace/pipeline/engine/types"
+	"github.com/loft-sh/devspace/pkg/util/log"
+	"github.com/loft-sh/loft-util/pkg/downloader"
+	"github.com/loft-sh/loft-util/pkg/downloader/commands"
+	"github.com/pkg/errors"
+	"mvdan.cc/sh/v3/interp"
 )
 
 func init() {
@@ -41,6 +43,9 @@ var BasicCommands = map[string]func(ctx context.Context, args []string) error{
 	"is_true": func(ctx context.Context, args []string) error {
 		return enginecommands.IsTrue(args)
 	},
+	"is_in": func(ctx context.Context, args []string) error {
+		return enginecommands.IsIn(args)
+	},
 	"sleep": func(ctx context.Context, args []string) error {
 		return HandleError(ctx, "sleep", enginecommands.Sleep(ctx, args))
 	},
@@ -65,7 +70,7 @@ var OverwriteCommands = map[string]func(ctx context.Context, args []string, hand
 var EnsureCommands = map[string]func(ctx context.Context, args []string) (string, error){
 	"kubectl": func(ctx context.Context, args []string) (string, error) {
 		hc := interp.HandlerCtx(ctx)
-		path, err := downloader.NewDownloader(commands.NewKubectlCommand(), log.GetFileLogger("shell")).EnsureCommand(ctx)
+		path, err := downloader.NewDownloader(commands.NewKubectlCommand(), log.GetFileLogger("shell"), constants.DefaultHomeDevSpaceFolder).EnsureCommand(ctx)
 		if err != nil {
 			_, _ = fmt.Fprintln(hc.Stderr, err)
 			return "", interp.NewExitStatus(127)
@@ -74,7 +79,7 @@ var EnsureCommands = map[string]func(ctx context.Context, args []string) (string
 	},
 	"helm": func(ctx context.Context, args []string) (string, error) {
 		hc := interp.HandlerCtx(ctx)
-		path, err := downloader.NewDownloader(commands.NewHelmV3Command(), log.GetFileLogger("shell")).EnsureCommand(ctx)
+		path, err := downloader.NewDownloader(commands.NewHelmV3Command(), log.GetFileLogger("shell"), constants.DefaultHomeDevSpaceFolder).EnsureCommand(ctx)
 		if err != nil {
 			_, _ = fmt.Fprintln(hc.Stderr, err)
 			return "", interp.NewExitStatus(127)
