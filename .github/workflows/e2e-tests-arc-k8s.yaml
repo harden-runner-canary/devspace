@@ -25,6 +25,7 @@ jobs:
     container: ubuntu
 
     steps:
+      - run: apt update
     # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
     # - name: Harden Runner
     #   uses: step-security/harden-runner@rc
